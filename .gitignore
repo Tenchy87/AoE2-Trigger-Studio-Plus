@@ -1,0 +1,79 @@
+# ============================================================
+# AoE2 Trigger Studio+ - Git exclusions
+# ============================================================
+
+# Development scripts and generated investigation files
+scripts/
+outputs/
+
+# Python cache / compiled Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Python environments
+.venv/
+venv/
+
+# PyInstaller build output
+build/
+dist/
+*.spec
+
+# Age of Empires II scenario files
+*.aoe2scenario
+
+# Logs
+*.log
+logs/
+
+# Development backups
+*.bak
+*.backup*
+*.py.*_backup_*
+
+# Archives / test distributions
+*.zip
+
+# Historical development patch files
+apply_condition_undo_fix.py
+fix_condition_undo_complete.py
+
+# IDE files
+.vscode/
+.idea/
+
+# Windows / macOS junk
+Thumbs.db
+.DS_Store
+
+# Temporary files
+*.tmp
+
+# Legacy root-level development scans and patch scripts
+*_scan.txt
+*_current.txt
+*_broken.txt
+*_full.txt
+*_details.txt
+*_section.txt
+*_signatures*.txt
+
+# Root-level development PowerShell scripts
+/*.ps1
+
+# Recovery/context development files
+aokts_*.txt
+AoE2_Trigger_Studio_Project_Context*.txt
+
+# Internal development documentation
+docs/
+
+# Generated test images
+test_map_export.png
+
+# Development / investigation tests
+tests/
+
+# All timestamped main-window backups
+ui/main_window.py.*
