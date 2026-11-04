@@ -10,6 +10,10 @@ The project is inspired by the trigger-editing workflow of **AoKTS** and is bein
 >
 > Always keep backup copies of important `.aoe2scenario` files before editing them with development builds.
 
+## Screenshot
+
+![AoE2 Trigger Studio+ main window](screenshots/Main_Window.png)
+
 ## Current Features
 
 ### Scenario Management
