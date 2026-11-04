@@ -58,33 +58,7 @@ Additional transitive dependencies may be included in packaged builds.
 
 The exact license for every bundled version of these packages has not yet been recorded in this source-repository notice. Before publishing the first downloadable binary release, generate an inventory from the final release environment and verify the license and notice requirements for every bundled package.
 
-## Binary Distribution Checklist
-
-Before publishing a downloadable AoE2 Trigger Studio+ Windows package:
-
-1. Freeze the exact release environment and record package versions.
-2. Inspect the PyInstaller build to identify all bundled Python and Qt components.
-3. Verify the license of every bundled dependency.
-4. Include all applicable third-party license texts and copyright notices.
-5. Include the AoE2 Trigger Studio+ `LICENSE` file.
-6. Include this notice, updated to match the actual release contents.
-7. Make corresponding source available where required by GPL-covered components.
-
-A future release archive may use a layout similar to:
-
-```text
-AoE2 Trigger Studio+/
-├── AoE2 Trigger Studio+.exe
-├── LICENSE
-├── THIRD_PARTY_LICENSES.md
-├── licenses/
-│   ├── AoE2ScenarioParser-GPL-3.0.txt
-│   ├── PySide6-Qt-license.txt
-│   ├── Qt-third-party-notices.txt
-│   ├── Python-PSF-license.txt
-│   └── additional-dependency-licenses...
-└── _internal/
-```
+Binary Distribution Checklist
 
 ## Age of Empires Notice
 
