@@ -169,9 +169,13 @@ Age of Empires and Age of Empires II are trademarks of their respective owners.
 
 ## License
 
-Third-Party Software
-AoE2 Trigger Studio+ uses third-party open-source software, including AoE2ScenarioParser, PySide6 / Qt for Python, Python, and other supporting libraries.
+Copyright © 2026 Lloyd Tench
 
-These components remain subject to their respective licenses.
+AoE2 Trigger Studio+ is licensed under the GNU General Public License
+version 3.0 (GPL-3.0).
 
-See THIRD_PARTY_LICENSES.md for details.
+See [LICENSE](LICENSE) for the full license terms.
+
+Third-party components used by AoE2 Trigger Studio+ remain subject to
+their respective licenses. See
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for details.
