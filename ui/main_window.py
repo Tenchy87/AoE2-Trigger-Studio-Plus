@@ -72,6 +72,9 @@ from services.commands.change_condition_type_command import ChangeConditionTypeC
 from services.commands.delete_logic_object_command import DeleteLogicObjectCommand
 from services.commands.move_logic_object_command import MoveLogicObjectCommand
 from AoE2ScenarioParser.scenarios.aoe2_de_scenario import AoE2DEScenario
+# AOKTS_COMPARE_DEVELOPER_MODE_PATCH_V2
+from PySide6.QtGui import QShortcut
+from ui.scenario_compare_tab import ScenarioCompareTab
 
 
 class BusyOperationWorker(QObject):
@@ -1745,6 +1748,15 @@ class MainWindow(QMainWindow):
         self.copied_trigger_id = None
         self.copied_trigger_name = None
         self.copied_trigger_object = None
+        # AOKTS_COMPARE_DEVELOPER_MODE_PATCH_V2
+        self.developer_mode = False
+        self.compare_tab = None
+        self.developer_shortcut = QShortcut(
+            QKeySequence("Ctrl+Alt+H"), self
+        )
+        self.developer_shortcut.activated.connect(
+            self.toggle_developer_mode
+        )
         self.cut_trigger_object = None
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -1832,6 +1844,42 @@ class MainWindow(QMainWindow):
             raise outcome["error"]
 
         return outcome["result"]
+
+    # AOKTS_COMPARE_DEVELOPER_MODE_PATCH_V2
+    def load_scenario_for_compare(self, path):
+        resolved_path = Path(path).expanduser().resolve()
+        return AoE2DEScenario.from_file(str(resolved_path))
+
+    def toggle_developer_mode(self):
+        self.developer_mode = not self.developer_mode
+        if self.developer_mode:
+            if self.compare_tab is None:
+                self.compare_tab = ScenarioCompareTab(
+                    self.load_scenario_for_compare, self
+                )
+            compare_index = self.tabs.indexOf(self.compare_tab)
+            if compare_index < 0:
+                compare_index = self.tabs.addTab(
+                    self.compare_tab, "Compare"
+                )
+            self.tabs.setCurrentIndex(compare_index)
+            QMessageBox.information(
+                self,
+                "Developer Mode Unlocked",
+                "Developer Mode has been unlocked.\n\n"
+                "Advanced developer tools are now available.",
+            )
+            self.statusBar().showMessage(
+                "Developer Mode enabled", 3000
+            )
+            return
+        if self.compare_tab is not None:
+            compare_index = self.tabs.indexOf(self.compare_tab)
+            if compare_index >= 0:
+                self.tabs.removeTab(compare_index)
+        self.statusBar().showMessage(
+            "Developer Mode disabled", 3000
+        )
 
     def create_menus(self):
         file_menu = self.menuBar().addMenu("File")

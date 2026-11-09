@@ -77,3 +77,17 @@ tests/
 
 # All timestamped main-window backups
 ui/main_window.py.*
+
+# Copilot/AoKTS patch backups
+*.before_*
+*.compare_patch_backup
+
+# Python / PyInstaller build output
+__pycache__/
+*.pyc
+build/
+dist/
+
+# Local patch scripts
+apply_compare_*.py
+apply_excel_*.py

@@ -1,2 +1,3 @@
 AoE2ScenarioParser
 PySide6
+openpyxl
