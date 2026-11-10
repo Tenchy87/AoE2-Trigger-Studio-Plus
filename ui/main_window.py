@@ -57,7 +57,15 @@ from AoE2ScenarioParser.datasets.conditions import ConditionId
 from AoE2ScenarioParser.datasets.effects import EffectId
 from AoE2ScenarioParser.datasets.players import PlayerId
 from AoE2ScenarioParser.datasets.techs import TechInfo
-from AoE2ScenarioParser.datasets.trigger_lists import Attribute
+from AoE2ScenarioParser.datasets.trigger_lists import Attribute, DifficultyLevel, DiplomacyState
+# AOKTS_DIPLOMACY_STATE_V21
+# AOKTS_DIPLOMACY_STATE_GAIA_V21_1
+# AOKTS_DISPLAY_TIMER_TRIGGERED_V22
+# AOKTS_DISPLAY_TIMER_GAME_UI_V22_1
+# AOKTS_HERO_POWER_CAST_V23
+# AOKTS_LOCAL_TECH_RESEARCHED_V24
+# AOKTS_HERO_POWER_CAST_GAIA_V23_1_FIXED
+# AOKTS_DIFFICULTY_LEVEL_V20
 from AoE2ScenarioParser.datasets.units import UnitInfo
 
 from services.logger_service import LoggerService
@@ -197,6 +205,11 @@ class ConditionPickerDialog(QDialog):
     CONDITION_AND = "and"
     CONDITION_OR = "or"
     CONDITION_DECISION_TRIGGERED = "decision_triggered"
+    CONDITION_DIFFICULTY_LEVEL = "difficulty_level"
+    CONDITION_DIPLOMACY_STATE = "diplomacy_state"
+    CONDITION_DISPLAY_TIMER_TRIGGERED = "display_timer_triggered"
+    CONDITION_HERO_POWER_CAST = "hero_power_cast"
+    CONDITION_LOCAL_TECH_RESEARCHED = "local_tech_researched"
     CONDITION_RESEARCH_TECHNOLOGY = "research_technology"
     CONDITION_DESTROY_OBJECT = "destroy_object"
     CONDITION_BRING_OBJECT_TO_AREA = "bring_object_to_area"
@@ -231,7 +244,12 @@ class ConditionPickerDialog(QDialog):
             ("Condition Joiner", self.CONDITION_AND),
             ("Condition Separator", self.CONDITION_OR),
             ("Decision Triggered", self.CONDITION_DECISION_TRIGGERED),
+            ("Difficulty Level", self.CONDITION_DIFFICULTY_LEVEL),
+            ("Diplomacy State", self.CONDITION_DIPLOMACY_STATE),
+            ("Display Timer Triggered", self.CONDITION_DISPLAY_TIMER_TRIGGERED),
             ("Destroy Object", self.CONDITION_DESTROY_OBJECT),
+            ("Hero Power Cast", self.CONDITION_HERO_POWER_CAST),
+            ("Local Tech Researched", self.CONDITION_LOCAL_TECH_RESEARCHED),
             ("Objects In Area", self.CONDITION_OBJECTS_IN_AREA),
             ("Own Fewer Objects", self.CONDITION_OWN_FEWER_OBJECTS),
             ("Own Objects", self.CONDITION_OWN_OBJECTS),
@@ -262,10 +280,15 @@ class ConditionPickerDialog(QDialog):
         self.and_page = self.create_and_page()
         self.or_page = self.create_or_page()
         self.decision_triggered_page = self.create_decision_triggered_page()
+        self.difficulty_level_page = self.create_difficulty_level_page()
+        self.diplomacy_state_page = self.create_diplomacy_state_page()
+        self.display_timer_triggered_page = self.create_display_timer_triggered_page()
         self.research_technology_page = (
             self.create_research_technology_page()
         )
         self.destroy_object_page = self.create_destroy_object_page()
+        self.hero_power_cast_page = self.create_hero_power_cast_page()
+        self.local_tech_researched_page = self.create_local_tech_researched_page()
         self.bring_object_to_area_page = (
             self.create_bring_object_to_area_page()
         )
@@ -290,7 +313,12 @@ class ConditionPickerDialog(QDialog):
         self.condition_settings.addWidget(self.and_page)
         self.condition_settings.addWidget(self.or_page)
         self.condition_settings.addWidget(self.decision_triggered_page)
+        self.condition_settings.addWidget(self.difficulty_level_page)
+        self.condition_settings.addWidget(self.diplomacy_state_page)
+        self.condition_settings.addWidget(self.display_timer_triggered_page)
         self.condition_settings.addWidget(self.destroy_object_page)
+        self.condition_settings.addWidget(self.hero_power_cast_page)
+        self.condition_settings.addWidget(self.local_tech_researched_page)
         self.condition_settings.addWidget(self.objects_in_area_page)
         self.condition_settings.addWidget(self.own_fewer_objects_page)
         self.condition_settings.addWidget(self.own_objects_page)
@@ -411,6 +439,56 @@ class ConditionPickerDialog(QDialog):
         help_label.setWordWrap(True)
         layout.addRow("", help_label)
 
+        return page
+
+    def create_hero_power_cast_page(self):
+        """Create controls for Hero Power Cast (player only; no inversion)."""
+        page = QWidget()
+        layout = QFormLayout()
+        page.setLayout(layout)
+        self.hero_power_cast_source_player = self.create_player_combo()
+        self.hero_power_cast_source_player.insertItem(0, "Gaia", 0)
+        layout.addRow("Player:", self.hero_power_cast_source_player)
+        return page
+
+    def create_local_tech_researched_page(self):
+        page = QWidget()
+        layout = QFormLayout()
+        page.setLayout(layout)
+        self.local_tech_player = self.create_player_combo()
+        self.local_tech_player.insertItem(0, "Gaia", 0)
+        self.local_tech_technology = QComboBox()
+        for label, value in (
+            ("Defensive Town Center", 1197),
+            ("Economic Town Center", 1195),
+            ("Military Town Center", 1196),
+            ("Fortified Outpost", 1270),
+            ("Defensive Emplacement", 1323),
+            ("Offensive Emplacement", 1324),
+        ):
+            self.local_tech_technology.addItem(label, value)
+        self.local_tech_technology.setCurrentIndex(4)
+        self.local_tech_object = self.create_object_instance_spinbox()
+        self.local_tech_quantity = QSpinBox()
+        self.local_tech_quantity.setRange(-1, 2147483647)
+        self.local_tech_quantity.setValue(-1)
+        self.local_tech_x1 = self.create_coordinate_spinbox()
+        self.local_tech_y1 = self.create_coordinate_spinbox()
+        self.local_tech_x2 = self.create_coordinate_spinbox()
+        self.local_tech_y2 = self.create_coordinate_spinbox()
+        for control in (self.local_tech_x1, self.local_tech_y1,
+                        self.local_tech_x2, self.local_tech_y2):
+            control.setValue(-1)
+        self.local_tech_inverted = QCheckBox("Invert this condition")
+        layout.addRow("Player:", self.local_tech_player)
+        layout.addRow("Local Technology:", self.local_tech_technology)
+        layout.addRow("Object instance ID:", self.local_tech_object)
+        layout.addRow("Quantity:", self.local_tech_quantity)
+        layout.addRow("Area X1:", self.local_tech_x1)
+        layout.addRow("Area Y1:", self.local_tech_y1)
+        layout.addRow("Area X2:", self.local_tech_x2)
+        layout.addRow("Area Y2:", self.local_tech_y2)
+        layout.addRow("", self.local_tech_inverted)
         return page
 
     def create_objects_in_area_page(self):
@@ -566,6 +644,65 @@ class ConditionPickerDialog(QDialog):
             "The scenario object instance ID used by the trigger condition."
         )
         return spinbox
+
+    def create_difficulty_level_page(self):
+        """Create Difficulty Level controls using parser-backed values."""
+        page = QWidget()
+        layout = QFormLayout()
+        page.setLayout(layout)
+
+        self.difficulty_level_value = QComboBox()
+        for label, value in (
+            ("Easiest", DifficultyLevel.EASIEST.value),
+            ("Standard", DifficultyLevel.STANDARD.value),
+            ("Moderate", DifficultyLevel.MODERATE.value),
+            ("Hard", DifficultyLevel.HARD.value),
+            ("Hardest", DifficultyLevel.HARDEST.value),
+            ("Extreme", DifficultyLevel.EXTREME.value),
+        ):
+            self.difficulty_level_value.addItem(label, value)
+        self.difficulty_level_inverted = QCheckBox("Invert this condition")
+        layout.addRow("Difficulty:", self.difficulty_level_value)
+        layout.addRow("", self.difficulty_level_inverted)
+        return page
+
+    def create_diplomacy_state_page(self):
+        """Create directional Diplomacy State controls."""
+        page = QWidget()
+        layout = QFormLayout()
+        page.setLayout(layout)
+        self.diplomacy_state_source_player = self.create_player_combo()
+        self.diplomacy_state_target_player = self.create_player_combo()
+        self.diplomacy_state_source_player.insertItem(0, "Gaia", 0)
+        self.diplomacy_state_target_player.insertItem(0, "Gaia", 0)
+        self.diplomacy_state_value = QComboBox()
+        for label, value in (
+            ("Ally", DiplomacyState.ALLY.value),
+            ("Neutral", DiplomacyState.NEUTRAL.value),
+            ("Enemy", DiplomacyState.ENEMY.value),
+        ):
+            self.diplomacy_state_value.addItem(label, value)
+        self.diplomacy_state_inverted = QCheckBox("Invert this condition")
+        layout.addRow("Source Player:", self.diplomacy_state_source_player)
+        layout.addRow("Target Player:", self.diplomacy_state_target_player)
+        layout.addRow("Diplomacy State:", self.diplomacy_state_value)
+        layout.addRow("", self.diplomacy_state_inverted)
+        return page
+
+    def create_display_timer_triggered_page(self):
+        """Create controls for the Display Timer Triggered condition."""
+        page = QWidget()
+        layout = QFormLayout()
+        page.setLayout(layout)
+        self.display_timer_triggered_timer_id = QComboBox()
+        for timer_id in range(10):
+            self.display_timer_triggered_timer_id.addItem(
+                f"Timer {timer_id}", timer_id
+            )
+        self.display_timer_triggered_inverted = QCheckBox("Invert this condition")
+        layout.addRow("Timer:", self.display_timer_triggered_timer_id)
+        layout.addRow("", self.display_timer_triggered_inverted)
+        return page
 
     def create_destroy_object_page(self):
         page = QWidget()
@@ -1047,6 +1184,43 @@ class ConditionPickerDialog(QDialog):
                 },
             }
 
+        if condition_type == self.CONDITION_DIFFICULTY_LEVEL:
+            return {
+                "type": condition_type,
+                "label": "Difficulty Level",
+                "condition_id": ConditionId.DIFFICULTY_LEVEL,
+                "kwargs": {
+                    "quantity": self.difficulty_level_value.currentData(),
+                    "inverted": int(
+                        self.difficulty_level_inverted.isChecked()
+                    ),
+                },
+            }
+
+        if condition_type == self.CONDITION_DIPLOMACY_STATE:
+            return {
+                "type": condition_type,
+                "label": "Diplomacy State",
+                "condition_id": ConditionId.DIPLOMACY_STATE,
+                "kwargs": {
+                    "quantity": self.diplomacy_state_value.currentData(),
+                    "source_player": self.diplomacy_state_source_player.currentData(),
+                    "target_player": self.diplomacy_state_target_player.currentData(),
+                    "inverted": int(self.diplomacy_state_inverted.isChecked()),
+                },
+            }
+
+        if condition_type == self.CONDITION_DISPLAY_TIMER_TRIGGERED:
+            return {
+                "type": condition_type,
+                "label": "Display Timer Triggered",
+                "condition_id": ConditionId.DISPLAY_TIMER_TRIGGERED,
+                "kwargs": {
+                    "timer_id": self.display_timer_triggered_timer_id.currentData(),
+                    "inverted": int(self.display_timer_triggered_inverted.isChecked()),
+                },
+            }
+
         if condition_type == self.CONDITION_DESTROY_OBJECT:
             return {
                 "type": condition_type,
@@ -1059,6 +1233,34 @@ class ConditionPickerDialog(QDialog):
                     "inverted": int(
                         self.destroy_object_inverted.isChecked()
                     ),
+                },
+            }
+
+        if condition_type == self.CONDITION_HERO_POWER_CAST:
+            return {
+                "type": condition_type,
+                "label": "Hero Power Cast",
+                "condition_id": ConditionId.HERO_POWER_CAST,
+                "kwargs": {
+                    "source_player": self.hero_power_cast_source_player.currentData(),
+                },
+            }
+
+        if condition_type == self.CONDITION_LOCAL_TECH_RESEARCHED:
+            return {
+                "type": condition_type,
+                "label": "Local Tech Researched",
+                "condition_id": ConditionId.LOCAL_TECH_RESEARCHED,
+                "kwargs": {
+                    "local_technology": self.local_tech_technology.currentData(),
+                    "source_player": self.local_tech_player.currentData(),
+                    "unit_object": self.local_tech_object.value(),
+                    "area_x1": self.local_tech_x1.value(),
+                    "area_y1": self.local_tech_y1.value(),
+                    "area_x2": self.local_tech_x2.value(),
+                    "area_y2": self.local_tech_y2.value(),
+                    "quantity": self.local_tech_quantity.value(),
+                    "inverted": int(self.local_tech_inverted.isChecked()),
                 },
             }
 
@@ -2901,6 +3103,113 @@ class MainWindow(QMainWindow):
             self.decision_triggered_editor_page
         )
 
+        # AOKTS_DIFFICULTY_LEVEL_V20
+        self.difficulty_level_editor_page = QWidget()
+        difficulty_level_layout = QFormLayout()
+        difficulty_level_layout.setContentsMargins(14, 14, 14, 14)
+        difficulty_level_layout.setHorizontalSpacing(14)
+        difficulty_level_layout.setVerticalSpacing(12)
+        self.difficulty_level_editor_page.setLayout(difficulty_level_layout)
+
+        self.edit_difficulty_level_value = QComboBox()
+        for label, value in (
+            ("Easiest", DifficultyLevel.EASIEST.value),
+            ("Standard", DifficultyLevel.STANDARD.value),
+            ("Moderate", DifficultyLevel.MODERATE.value),
+            ("Hard", DifficultyLevel.HARD.value),
+            ("Hardest", DifficultyLevel.HARDEST.value),
+            ("Extreme", DifficultyLevel.EXTREME.value),
+        ):
+            self.edit_difficulty_level_value.addItem(label, value)
+        self.edit_difficulty_level_inverted = QCheckBox(
+            "Invert this condition"
+        )
+        difficulty_level_layout.addRow(
+            "Difficulty:", self.edit_difficulty_level_value
+        )
+        difficulty_level_layout.addRow(
+            "", self.edit_difficulty_level_inverted
+        )
+        self.difficulty_level_apply_button = QPushButton("Apply Changes")
+        self.difficulty_level_cancel_button = QPushButton("Cancel")
+        difficulty_level_buttons = QHBoxLayout()
+        difficulty_level_buttons.addWidget(
+            self.difficulty_level_apply_button
+        )
+        difficulty_level_buttons.addWidget(
+            self.difficulty_level_cancel_button
+        )
+        difficulty_level_layout.addRow("", difficulty_level_buttons)
+        self.difficulty_level_apply_button.clicked.connect(
+            self.apply_wave_1_condition_edit
+        )
+        self.difficulty_level_cancel_button.clicked.connect(
+            self.cancel_logic_edit
+        )
+        self.logic_editor_stack.addWidget(
+            self.difficulty_level_editor_page
+        )
+
+        # AOKTS_DIPLOMACY_STATE_V21
+        self.diplomacy_state_editor_page = QWidget()
+        diplomacy_state_layout = QFormLayout()
+        diplomacy_state_layout.setContentsMargins(14, 14, 14, 14)
+        diplomacy_state_layout.setHorizontalSpacing(14)
+        diplomacy_state_layout.setVerticalSpacing(12)
+        self.diplomacy_state_editor_page.setLayout(diplomacy_state_layout)
+        self.edit_diplomacy_state_source_player = ConditionPickerDialog.create_player_combo()
+        self.edit_diplomacy_state_target_player = ConditionPickerDialog.create_player_combo()
+        self.edit_diplomacy_state_source_player.insertItem(0, "Gaia", 0)
+        self.edit_diplomacy_state_target_player.insertItem(0, "Gaia", 0)
+        self.edit_diplomacy_state_value = QComboBox()
+        for label, value in (
+            ("Ally", DiplomacyState.ALLY.value),
+            ("Neutral", DiplomacyState.NEUTRAL.value),
+            ("Enemy", DiplomacyState.ENEMY.value),
+        ):
+            self.edit_diplomacy_state_value.addItem(label, value)
+        self.edit_diplomacy_state_inverted = QCheckBox("Invert this condition")
+        diplomacy_state_layout.addRow("Source Player:", self.edit_diplomacy_state_source_player)
+        diplomacy_state_layout.addRow("Target Player:", self.edit_diplomacy_state_target_player)
+        diplomacy_state_layout.addRow("Diplomacy State:", self.edit_diplomacy_state_value)
+        diplomacy_state_layout.addRow("", self.edit_diplomacy_state_inverted)
+        self.diplomacy_state_apply_button = QPushButton("Apply Changes")
+        self.diplomacy_state_cancel_button = QPushButton("Cancel")
+        diplomacy_state_buttons = QHBoxLayout()
+        diplomacy_state_buttons.addWidget(self.diplomacy_state_apply_button)
+        diplomacy_state_buttons.addWidget(self.diplomacy_state_cancel_button)
+        diplomacy_state_layout.addRow("", diplomacy_state_buttons)
+        self.diplomacy_state_apply_button.clicked.connect(self.apply_wave_1_condition_edit)
+        self.diplomacy_state_cancel_button.clicked.connect(self.cancel_logic_edit)
+        self.logic_editor_stack.addWidget(self.diplomacy_state_editor_page)
+
+        # AOKTS_DISPLAY_TIMER_TRIGGERED_V22
+        self.display_timer_triggered_editor_page = QWidget()
+        display_timer_triggered_layout = QFormLayout()
+        display_timer_triggered_layout.setContentsMargins(14, 14, 14, 14)
+        display_timer_triggered_layout.setHorizontalSpacing(14)
+        display_timer_triggered_layout.setVerticalSpacing(12)
+        self.display_timer_triggered_editor_page.setLayout(display_timer_triggered_layout)
+        self.edit_display_timer_triggered_timer_id = QComboBox()
+        for timer_id in range(10):
+            self.edit_display_timer_triggered_timer_id.addItem(
+                f"Timer {timer_id}", timer_id
+            )
+        self.edit_display_timer_triggered_inverted = QCheckBox("Invert this condition")
+        display_timer_triggered_layout.addRow(
+            "Timer:", self.edit_display_timer_triggered_timer_id
+        )
+        display_timer_triggered_layout.addRow("", self.edit_display_timer_triggered_inverted)
+        self.display_timer_triggered_apply_button = QPushButton("Apply Changes")
+        self.display_timer_triggered_cancel_button = QPushButton("Cancel")
+        display_timer_triggered_buttons = QHBoxLayout()
+        display_timer_triggered_buttons.addWidget(self.display_timer_triggered_apply_button)
+        display_timer_triggered_buttons.addWidget(self.display_timer_triggered_cancel_button)
+        display_timer_triggered_layout.addRow("", display_timer_triggered_buttons)
+        self.display_timer_triggered_apply_button.clicked.connect(self.apply_wave_1_condition_edit)
+        self.display_timer_triggered_cancel_button.clicked.connect(self.cancel_logic_edit)
+        self.logic_editor_stack.addWidget(self.display_timer_triggered_editor_page)
+
         self.destroy_object_editor_page = QWidget()
         destroy_object_layout = QFormLayout()
         destroy_object_layout.setContentsMargins(14, 14, 14, 14)
@@ -2940,6 +3249,77 @@ class MainWindow(QMainWindow):
         self.logic_editor_stack.addWidget(
             self.destroy_object_editor_page
         )
+
+        # AOKTS_HERO_POWER_CAST_V23
+        self.hero_power_cast_editor_page = QWidget()
+        hero_power_cast_layout = QFormLayout()
+        hero_power_cast_layout.setContentsMargins(14, 14, 14, 14)
+        hero_power_cast_layout.setHorizontalSpacing(14)
+        hero_power_cast_layout.setVerticalSpacing(12)
+        self.hero_power_cast_editor_page.setLayout(hero_power_cast_layout)
+        self.edit_hero_power_cast_source_player = (
+            ConditionPickerDialog.create_player_combo()
+        )
+        self.edit_hero_power_cast_source_player.insertItem(0, "Gaia", 0)
+        hero_power_cast_layout.addRow(
+            "Player:", self.edit_hero_power_cast_source_player
+        )
+        self.hero_power_cast_apply_button = QPushButton("Apply Changes")
+        self.hero_power_cast_cancel_button = QPushButton("Cancel")
+        hero_power_cast_buttons = QHBoxLayout()
+        hero_power_cast_buttons.addWidget(self.hero_power_cast_apply_button)
+        hero_power_cast_buttons.addWidget(self.hero_power_cast_cancel_button)
+        hero_power_cast_layout.addRow("", hero_power_cast_buttons)
+        self.hero_power_cast_apply_button.clicked.connect(
+            self.apply_wave_1_condition_edit
+        )
+        self.hero_power_cast_cancel_button.clicked.connect(
+            self.cancel_logic_edit
+        )
+        self.logic_editor_stack.addWidget(self.hero_power_cast_editor_page)
+
+        self.local_tech_editor_page = QWidget()
+        local_layout = QFormLayout()
+        local_layout.setContentsMargins(14, 14, 14, 14)
+        self.local_tech_editor_page.setLayout(local_layout)
+        self.edit_local_tech_player = ConditionPickerDialog.create_player_combo()
+        self.edit_local_tech_player.insertItem(0, "Gaia", 0)
+        self.edit_local_tech_technology = QComboBox()
+        for label, value in (
+            ("Defensive Town Center", 1197),
+            ("Economic Town Center", 1195),
+            ("Military Town Center", 1196),
+            ("Fortified Outpost", 1270),
+            ("Defensive Emplacement", 1323),
+            ("Offensive Emplacement", 1324),
+        ):
+            self.edit_local_tech_technology.addItem(label, value)
+        self.edit_local_tech_object = ConditionPickerDialog.create_object_instance_spinbox()
+        self.edit_local_tech_quantity = QSpinBox()
+        self.edit_local_tech_quantity.setRange(-1, 2147483647)
+        self.edit_local_tech_x1 = ConditionPickerDialog.create_coordinate_spinbox()
+        self.edit_local_tech_y1 = ConditionPickerDialog.create_coordinate_spinbox()
+        self.edit_local_tech_x2 = ConditionPickerDialog.create_coordinate_spinbox()
+        self.edit_local_tech_y2 = ConditionPickerDialog.create_coordinate_spinbox()
+        self.edit_local_tech_inverted = QCheckBox("Invert this condition")
+        local_layout.addRow("Player:", self.edit_local_tech_player)
+        local_layout.addRow("Local Technology:", self.edit_local_tech_technology)
+        local_layout.addRow("Object instance ID:", self.edit_local_tech_object)
+        local_layout.addRow("Quantity:", self.edit_local_tech_quantity)
+        local_layout.addRow("Area X1:", self.edit_local_tech_x1)
+        local_layout.addRow("Area Y1:", self.edit_local_tech_y1)
+        local_layout.addRow("Area X2:", self.edit_local_tech_x2)
+        local_layout.addRow("Area Y2:", self.edit_local_tech_y2)
+        local_layout.addRow("", self.edit_local_tech_inverted)
+        self.local_tech_apply_button = QPushButton("Apply Changes")
+        self.local_tech_cancel_button = QPushButton("Cancel")
+        local_buttons = QHBoxLayout()
+        local_buttons.addWidget(self.local_tech_apply_button)
+        local_buttons.addWidget(self.local_tech_cancel_button)
+        local_layout.addRow("", local_buttons)
+        self.local_tech_apply_button.clicked.connect(self.apply_wave_1_condition_edit)
+        self.local_tech_cancel_button.clicked.connect(self.cancel_logic_edit)
+        self.logic_editor_stack.addWidget(self.local_tech_editor_page)
 
         self.bring_object_to_object_editor_page = QWidget()
         bring_object_to_object_layout = QFormLayout()
@@ -3319,8 +3699,18 @@ class MainWindow(QMainWindow):
             self.accumulate_attribute_cancel_button,
             self.research_technology_apply_button,
             self.research_technology_cancel_button,
+            self.difficulty_level_apply_button,
+            self.difficulty_level_cancel_button,
+            self.diplomacy_state_apply_button,
+            self.diplomacy_state_cancel_button,
+            self.display_timer_triggered_apply_button,
+            self.display_timer_triggered_cancel_button,
             self.destroy_object_apply_button,
             self.destroy_object_cancel_button,
+            self.hero_power_cast_apply_button,
+            self.hero_power_cast_cancel_button,
+            self.local_tech_apply_button,
+            self.local_tech_cancel_button,
             self.bring_object_to_area_apply_button,
             self.bring_object_to_area_cancel_button,
             self.bring_object_to_object_apply_button,
@@ -4283,6 +4673,71 @@ class MainWindow(QMainWindow):
         ai_signal = getattr(condition, "ai_signal", -1)
         if ai_signal != -1:
             lines.append(f"AI Signal: {ai_signal}")
+
+
+        if condition_type == ConditionId.DIPLOMACY_STATE.value:
+            diplomacy_names = {
+                DiplomacyState.ALLY.value: "Ally",
+                DiplomacyState.NEUTRAL.value: "Neutral",
+                DiplomacyState.ENEMY.value: "Enemy",
+            }
+            diplomacy_value = getattr(condition, "quantity", None)
+            lines.append(
+                "Diplomacy State: "
+                + diplomacy_names.get(diplomacy_value, str(diplomacy_value))
+            )
+            source_player = getattr(condition, "source_player", -1)
+            target_player = getattr(condition, "target_player", -1)
+            source_label = "Gaia" if source_player == 0 else f"Player {source_player}"
+            target_label = "Gaia" if target_player == 0 else f"Player {target_player}"
+            lines.append(f"Direction: {source_label} -> {target_label}")
+
+
+        if condition_type == ConditionId.DISPLAY_TIMER_TRIGGERED.value:
+            timer_id = getattr(condition, "timer_id", -1)
+            if timer_id != -1:
+                lines.append(f"Timer: Timer {timer_id}")
+
+        if condition_type == ConditionId.HERO_POWER_CAST.value:
+            source_player = getattr(condition, "source_player", -1)
+            if source_player >= 0:
+                source_label = "Gaia" if source_player == 0 else f"Player {source_player}"
+                lines.append(f"Player: {source_label}")
+
+        if condition_type == ConditionId.LOCAL_TECH_RESEARCHED.value:
+            tech_names = {1197: "Defensive Town Center", 1195: "Economic Town Center",
+                          1196: "Military Town Center", 1270: "Fortified Outpost",
+                          1323: "Defensive Emplacement", 1324: "Offensive Emplacement"}
+            player = getattr(condition, "source_player", -1)
+            local_technology = getattr(condition, "local_technology", -1)
+            lines.append(
+                "Local Technology: "
+                + tech_names.get(local_technology, f"Local Tech {local_technology}")
+            )
+            if player >= 0:
+                player_label = "Gaia" if player == 0 else f"Player {player}"
+                lines.append(f"Player: {player_label}")
+            quantity = getattr(condition, "quantity", -1)
+            if quantity != -1:
+                lines.append(f"Quantity: {quantity}")
+
+        if condition_type == ConditionId.DIFFICULTY_LEVEL.value:
+            difficulty_value = getattr(condition, "quantity", None)
+            difficulty_names = {
+                DifficultyLevel.EASIEST.value: "Easiest",
+                DifficultyLevel.STANDARD.value: "Standard",
+                DifficultyLevel.MODERATE.value: "Moderate",
+                DifficultyLevel.HARD.value: "Hard",
+                DifficultyLevel.HARDEST.value: "Hardest",
+                DifficultyLevel.EXTREME.value: "Extreme",
+            }
+            lines.append(
+                "Difficulty: "
+                + difficulty_names.get(
+                    difficulty_value,
+                    str(difficulty_value),
+                )
+            )
 
         timer = getattr(condition, "timer", -1)
         if timer != -1:
@@ -6786,13 +7241,42 @@ class MainWindow(QMainWindow):
             if variable >= 0 and variable2 >= 0:
                 details.append(f"Variable {variable} {symbol} Variable {variable2}")
 
+        if condition_type == ConditionId.DIFFICULTY_LEVEL.value:
+            difficulty_value = getattr(condition, "quantity", None)
+            difficulty_names = {
+                DifficultyLevel.EASIEST.value: "Easiest",
+                DifficultyLevel.STANDARD.value: "Standard",
+                DifficultyLevel.MODERATE.value: "Moderate",
+                DifficultyLevel.HARD.value: "Hard",
+                DifficultyLevel.HARDEST.value: "Hardest",
+                DifficultyLevel.EXTREME.value: "Extreme",
+            }
+            details.append(
+                difficulty_names.get(
+                    difficulty_value,
+                    f"Difficulty {difficulty_value}",
+                )
+            )
+
         if getattr(condition, "timer", -1) >= 0:
             details.append(f"{condition.timer}s")
 
-        if getattr(condition, "quantity", -1) >= 0:
+        if (
+            condition_type not in (
+                ConditionId.DIFFICULTY_LEVEL.value,
+                ConditionId.DIPLOMACY_STATE.value,
+            )
+            and getattr(condition, "quantity", -1) >= 0
+        ):
             details.append(f"quantity {condition.quantity}")
 
-        if getattr(condition, "source_player", -1) >= 0:
+        if (
+            condition_type not in (
+                ConditionId.DIPLOMACY_STATE.value,
+                ConditionId.HERO_POWER_CAST.value,
+            )
+            and getattr(condition, "source_player", -1) >= 0
+        ):
             details.append(f"player {condition.source_player}")
 
         if getattr(condition, "object_list", -1) >= 0:
@@ -7812,6 +8296,55 @@ class MainWindow(QMainWindow):
             page = self.decision_triggered_editor_page
             label = "Decision Triggered"
 
+        elif condition_type == ConditionId.DIFFICULTY_LEVEL.value:
+            difficulty_value = getattr(condition, "quantity", DifficultyLevel.STANDARD.value)
+            difficulty_index = self.edit_difficulty_level_value.findData(
+                difficulty_value
+            )
+            if difficulty_index >= 0:
+                self.edit_difficulty_level_value.setCurrentIndex(
+                    difficulty_index
+                )
+            self.edit_difficulty_level_inverted.setChecked(
+                bool(getattr(condition, "inverted", 0))
+            )
+            page = self.difficulty_level_editor_page
+            label = "Difficulty Level"
+
+        elif condition_type == ConditionId.DIPLOMACY_STATE.value:
+            self.set_combo_data(
+                self.edit_diplomacy_state_source_player,
+                getattr(condition, "source_player", 1),
+            )
+            self.set_combo_data(
+                self.edit_diplomacy_state_target_player,
+                getattr(condition, "target_player", 2),
+            )
+            self.set_combo_data(
+                self.edit_diplomacy_state_value,
+                getattr(condition, "quantity", DiplomacyState.ALLY.value),
+            )
+            self.edit_diplomacy_state_inverted.setChecked(
+                bool(getattr(condition, "inverted", 0))
+            )
+            page = self.diplomacy_state_editor_page
+            label = "Diplomacy State"
+
+        elif condition_type == ConditionId.DISPLAY_TIMER_TRIGGERED.value:
+            timer_id = getattr(condition, "timer_id", 0)
+            timer_index = self.edit_display_timer_triggered_timer_id.findData(timer_id)
+            if timer_index < 0:
+                self.edit_display_timer_triggered_timer_id.addItem(
+                    f"Timer {timer_id} (outside game UI range)", timer_id
+                )
+                timer_index = self.edit_display_timer_triggered_timer_id.count() - 1
+            self.edit_display_timer_triggered_timer_id.setCurrentIndex(timer_index)
+            self.edit_display_timer_triggered_inverted.setChecked(
+                bool(getattr(condition, "inverted", 0))
+            )
+            page = self.display_timer_triggered_editor_page
+            label = "Display Timer Triggered"
+
         elif condition_type == ConditionId.DESTROY_OBJECT.value:
             self.edit_destroy_object_unit_object.setValue(
                 max(0, getattr(condition, "unit_object", 0))
@@ -7821,6 +8354,27 @@ class MainWindow(QMainWindow):
             )
             page = self.destroy_object_editor_page
             label = "Destroy Object"
+
+        elif condition_type == ConditionId.HERO_POWER_CAST.value:
+            self.set_combo_data(
+                self.edit_hero_power_cast_source_player,
+                getattr(condition, "source_player", 1),
+            )
+            page = self.hero_power_cast_editor_page
+            label = "Hero Power Cast"
+
+        elif condition_type == ConditionId.LOCAL_TECH_RESEARCHED.value:
+            self.set_combo_data(self.edit_local_tech_player, getattr(condition, "source_player", 1))
+            self.set_combo_data(self.edit_local_tech_technology, getattr(condition, "local_technology", 1323))
+            self.edit_local_tech_object.setValue(getattr(condition, "unit_object", -1))
+            self.edit_local_tech_quantity.setValue(getattr(condition, "quantity", -1))
+            self.edit_local_tech_x1.setValue(getattr(condition, "area_x1", -1))
+            self.edit_local_tech_y1.setValue(getattr(condition, "area_y1", -1))
+            self.edit_local_tech_x2.setValue(getattr(condition, "area_x2", -1))
+            self.edit_local_tech_y2.setValue(getattr(condition, "area_y2", -1))
+            self.edit_local_tech_inverted.setChecked(bool(getattr(condition, "inverted", 0)))
+            page = self.local_tech_editor_page
+            label = "Local Tech Researched"
 
         elif condition_type == ConditionId.BRING_OBJECT_TO_OBJECT.value:
             self.edit_bring_object_to_object_unit_object.setValue(
@@ -7983,6 +8537,28 @@ class MainWindow(QMainWindow):
                 ),
             }
 
+        if condition_type == ConditionId.DIFFICULTY_LEVEL.value:
+            return {
+                "quantity": self.edit_difficulty_level_value.currentData(),
+                "inverted": int(
+                    self.edit_difficulty_level_inverted.isChecked()
+                ),
+            }
+
+        if condition_type == ConditionId.DIPLOMACY_STATE.value:
+            return {
+                "quantity": self.edit_diplomacy_state_value.currentData(),
+                "source_player": self.edit_diplomacy_state_source_player.currentData(),
+                "target_player": self.edit_diplomacy_state_target_player.currentData(),
+                "inverted": int(self.edit_diplomacy_state_inverted.isChecked()),
+            }
+
+        if condition_type == ConditionId.DISPLAY_TIMER_TRIGGERED.value:
+            return {
+                "timer_id": self.edit_display_timer_triggered_timer_id.currentData(),
+                "inverted": int(self.edit_display_timer_triggered_inverted.isChecked()),
+            }
+
         if condition_type == ConditionId.DESTROY_OBJECT.value:
             return {
                 "unit_object": (
@@ -7991,6 +8567,24 @@ class MainWindow(QMainWindow):
                 "inverted": int(
                     self.edit_destroy_object_inverted.isChecked()
                 ),
+            }
+
+        if condition_type == ConditionId.HERO_POWER_CAST.value:
+            return {
+                "source_player": self.edit_hero_power_cast_source_player.currentData(),
+            }
+
+        if condition_type == ConditionId.LOCAL_TECH_RESEARCHED.value:
+            return {
+                "local_technology": self.edit_local_tech_technology.currentData(),
+                "source_player": self.edit_local_tech_player.currentData(),
+                "unit_object": self.edit_local_tech_object.value(),
+                "area_x1": self.edit_local_tech_x1.value(),
+                "area_y1": self.edit_local_tech_y1.value(),
+                "area_x2": self.edit_local_tech_x2.value(),
+                "area_y2": self.edit_local_tech_y2.value(),
+                "quantity": self.edit_local_tech_quantity.value(),
+                "inverted": int(self.edit_local_tech_inverted.isChecked()),
             }
 
         if condition_type == ConditionId.BRING_OBJECT_TO_OBJECT.value:
