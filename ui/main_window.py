@@ -64,6 +64,7 @@ from AoE2ScenarioParser.datasets.trigger_lists import Attribute, DifficultyLevel
 # AOKTS_DISPLAY_TIMER_GAME_UI_V22_1
 # AOKTS_HERO_POWER_CAST_V23
 # AOKTS_LOCAL_TECH_RESEARCHED_V24
+# AOKTS_MULTIPLAYER_AI_SIGNAL_V25
 # AOKTS_HERO_POWER_CAST_GAIA_V23_1_FIXED
 # AOKTS_DIFFICULTY_LEVEL_V20
 from AoE2ScenarioParser.datasets.units import UnitInfo
@@ -210,6 +211,7 @@ class ConditionPickerDialog(QDialog):
     CONDITION_DISPLAY_TIMER_TRIGGERED = "display_timer_triggered"
     CONDITION_HERO_POWER_CAST = "hero_power_cast"
     CONDITION_LOCAL_TECH_RESEARCHED = "local_tech_researched"
+    CONDITION_MULTIPLAYER_AI_SIGNAL = "multiplayer_ai_signal"
     CONDITION_RESEARCH_TECHNOLOGY = "research_technology"
     CONDITION_DESTROY_OBJECT = "destroy_object"
     CONDITION_BRING_OBJECT_TO_AREA = "bring_object_to_area"
@@ -250,6 +252,7 @@ class ConditionPickerDialog(QDialog):
             ("Destroy Object", self.CONDITION_DESTROY_OBJECT),
             ("Hero Power Cast", self.CONDITION_HERO_POWER_CAST),
             ("Local Tech Researched", self.CONDITION_LOCAL_TECH_RESEARCHED),
+            ("Multiplayer AI Signal", self.CONDITION_MULTIPLAYER_AI_SIGNAL),
             ("Objects In Area", self.CONDITION_OBJECTS_IN_AREA),
             ("Own Fewer Objects", self.CONDITION_OWN_FEWER_OBJECTS),
             ("Own Objects", self.CONDITION_OWN_OBJECTS),
@@ -277,6 +280,9 @@ class ConditionPickerDialog(QDialog):
         )
         self.accumulate_attribute_page = self.create_accumulate_attribute_page()
         self.ai_signal_page = self.create_ai_signal_page()
+        self.multiplayer_ai_signal_page = (
+            self.create_multiplayer_ai_signal_page()
+        )
         self.and_page = self.create_and_page()
         self.or_page = self.create_or_page()
         self.decision_triggered_page = self.create_decision_triggered_page()
@@ -319,6 +325,7 @@ class ConditionPickerDialog(QDialog):
         self.condition_settings.addWidget(self.destroy_object_page)
         self.condition_settings.addWidget(self.hero_power_cast_page)
         self.condition_settings.addWidget(self.local_tech_researched_page)
+        self.condition_settings.addWidget(self.multiplayer_ai_signal_page)
         self.condition_settings.addWidget(self.objects_in_area_page)
         self.condition_settings.addWidget(self.own_fewer_objects_page)
         self.condition_settings.addWidget(self.own_objects_page)
@@ -351,6 +358,31 @@ class ConditionPickerDialog(QDialog):
         self.ai_signal_inverted = QCheckBox("Invert this condition")
         layout.addRow("AI Signal:", self.ai_signal_value)
         layout.addRow("", self.ai_signal_inverted)
+        return page
+
+    def create_multiplayer_ai_signal_page(self):
+        page = QWidget()
+        layout = QFormLayout()
+        page.setLayout(layout)
+        self.multiplayer_ai_signal_value = QComboBox()
+        for signal_value in range(256):
+            self.multiplayer_ai_signal_value.addItem(
+                f"AI Signal {signal_value}", signal_value
+            )
+        self.multiplayer_ai_signal_value.setCurrentIndex(0)
+        self.multiplayer_ai_signal_inverted = QCheckBox(
+            "Invert this condition"
+        )
+        layout.addRow(
+            "AI Signal:", self.multiplayer_ai_signal_value
+        )
+        layout.addRow("", self.multiplayer_ai_signal_inverted)
+        help_label = QLabel(
+            "Checks whether the specified multiplayer AI signal has been "
+            "received."
+        )
+        help_label.setWordWrap(True)
+        layout.addRow("", help_label)
         return page
 
     def create_timer_page(self):
@@ -1068,6 +1100,18 @@ class ConditionPickerDialog(QDialog):
                 },
             }
 
+        if condition_type == self.CONDITION_MULTIPLAYER_AI_SIGNAL:
+            return {
+                "type": condition_type,
+                "label": "Multiplayer AI Signal",
+                "condition_id": ConditionId.AI_SIGNAL_MULTIPLAYER,
+                "kwargs": {
+                    "ai_signal": self.multiplayer_ai_signal_value.currentData(),
+                    "inverted": int(
+                        self.multiplayer_ai_signal_inverted.isChecked()
+                    ),
+                },
+            }
         if condition_type == self.CONDITION_TIMER:
             return {
                 "type": condition_type,
@@ -2699,6 +2743,51 @@ class MainWindow(QMainWindow):
         )
         self.ai_signal_cancel_button.clicked.connect(self.cancel_logic_edit)
         self.logic_editor_stack.addWidget(self.ai_signal_editor_page)
+        self.multiplayer_ai_signal_editor_page = QWidget()
+        multiplayer_ai_signal_layout = QFormLayout()
+        multiplayer_ai_signal_layout.setContentsMargins(14, 14, 14, 14)
+        multiplayer_ai_signal_layout.setHorizontalSpacing(14)
+        multiplayer_ai_signal_layout.setVerticalSpacing(12)
+        self.multiplayer_ai_signal_editor_page.setLayout(
+            multiplayer_ai_signal_layout
+        )
+        self.edit_multiplayer_ai_signal_value = QComboBox()
+        for signal_value in range(256):
+            self.edit_multiplayer_ai_signal_value.addItem(
+                f"AI Signal {signal_value}", signal_value
+            )
+        self.edit_multiplayer_ai_signal_inverted = QCheckBox(
+            "Invert this condition"
+        )
+        multiplayer_ai_signal_layout.addRow(
+            "AI Signal:", self.edit_multiplayer_ai_signal_value
+        )
+        multiplayer_ai_signal_layout.addRow(
+            "", self.edit_multiplayer_ai_signal_inverted
+        )
+        self.multiplayer_ai_signal_apply_button = QPushButton(
+            "Apply Changes"
+        )
+        self.multiplayer_ai_signal_cancel_button = QPushButton("Cancel")
+        multiplayer_ai_signal_buttons = QHBoxLayout()
+        multiplayer_ai_signal_buttons.addWidget(
+            self.multiplayer_ai_signal_apply_button
+        )
+        multiplayer_ai_signal_buttons.addWidget(
+            self.multiplayer_ai_signal_cancel_button
+        )
+        multiplayer_ai_signal_layout.addRow(
+            "", multiplayer_ai_signal_buttons
+        )
+        self.multiplayer_ai_signal_apply_button.clicked.connect(
+            self.apply_wave_1_condition_edit
+        )
+        self.multiplayer_ai_signal_cancel_button.clicked.connect(
+            self.cancel_logic_edit
+        )
+        self.logic_editor_stack.addWidget(
+            self.multiplayer_ai_signal_editor_page
+        )
 
         self.own_objects_editor_page = QWidget()
         own_objects_layout = QFormLayout()
@@ -4668,6 +4757,8 @@ class MainWindow(QMainWindow):
             ConditionId,
             f"Condition Type {condition_type}",
         )
+        if condition_type == ConditionId.AI_SIGNAL_MULTIPLAYER.value:
+            title = "Multiplayer AI Signal"
         lines = [title]
 
         ai_signal = getattr(condition, "ai_signal", -1)
@@ -7189,6 +7280,8 @@ class MainWindow(QMainWindow):
             condition_name = "Condition Joiner"
         elif condition_type == ConditionId.OR.value:
             condition_name = "Condition Separator"
+        elif condition_type == ConditionId.AI_SIGNAL_MULTIPLAYER.value:
+            condition_name = "Multiplayer AI Signal"
 
         details = []
 
@@ -8140,6 +8233,18 @@ class MainWindow(QMainWindow):
             page = self.ai_signal_editor_page
             label = "AI Signal"
 
+        elif condition_type == ConditionId.AI_SIGNAL_MULTIPLAYER.value:
+            signal_value = getattr(condition, "ai_signal", 0)
+            self.set_combo_data(
+                self.edit_multiplayer_ai_signal_value,
+                max(0, min(255, signal_value)),
+            )
+            self.edit_multiplayer_ai_signal_inverted.setChecked(
+                bool(getattr(condition, "inverted", 0))
+            )
+            page = self.multiplayer_ai_signal_editor_page
+            label = "Multiplayer AI Signal"
+
         elif condition_type == ConditionId.OWN_OBJECTS.value:
             self.set_combo_data(
                 self.edit_own_objects_player,
@@ -8425,6 +8530,14 @@ class MainWindow(QMainWindow):
             return {
                 "ai_signal": self.edit_ai_signal_value.value(),
                 "inverted": int(self.edit_ai_signal_inverted.isChecked()),
+            }
+
+        if condition_type == ConditionId.AI_SIGNAL_MULTIPLAYER.value:
+            return {
+                "ai_signal": self.edit_multiplayer_ai_signal_value.currentData(),
+                "inverted": int(
+                    self.edit_multiplayer_ai_signal_inverted.isChecked()
+                ),
             }
 
         if condition_type == ConditionId.TIMER.value:
