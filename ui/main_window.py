@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QTextEdit,
+    QPlainTextEdit,
     QLineEdit,
     QInputDialog,
     QMenu,
@@ -55,9 +56,17 @@ from PySide6.QtWidgets import (
 
 from AoE2ScenarioParser.datasets.conditions import ConditionId
 from AoE2ScenarioParser.datasets.effects import EffectId
-from AoE2ScenarioParser.datasets.players import PlayerId
+from AoE2ScenarioParser.datasets.players import PlayerId, ColorId
 from AoE2ScenarioParser.datasets.techs import TechInfo
-from AoE2ScenarioParser.datasets.trigger_lists import Attribute, DifficultyLevel, DiplomacyState
+from AoE2ScenarioParser.datasets.trigger_lists import (
+    Attribute,
+    DifficultyLevel,
+    DiplomacyState,
+)
+from AoE2ScenarioParser.datasets.object_support import (
+    StartingAge,
+    Civilization,
+)
 # AOKTS_DIPLOMACY_STATE_V21
 # AOKTS_DIPLOMACY_STATE_GAIA_V21_1
 # AOKTS_DISPLAY_TIMER_TRIGGERED_V22
@@ -74,6 +83,7 @@ from services.minimap_renderer import MinimapRenderer
 from services.scenario_service import ScenarioService
 from services.undo_manager import UndoManager
 from services.commands.rename_trigger_command import RenameTriggerCommand
+from services.commands.edit_scenario_message_command import EditScenarioMessageCommand
 from services.commands.reorder_trigger_command import ReorderTriggerCommand
 from services.commands.edit_logic_object_command import EditLogicObjectCommand
 from services.commands.add_condition_command import AddConditionCommand
@@ -2016,6 +2026,8 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.tabs)
 
         self.create_triggers_tab()
+        self.create_messages_tab()
+        self.create_players_tab()
         self.create_units_tab()
         self.create_minimap_dock()
 
@@ -3878,6 +3890,586 @@ class MainWindow(QMainWindow):
             self.add_effect
         )
 
+    # AOKTS_MESSAGES_WORKSPACE_V1
+    MESSAGE_FIELDS = (
+        ("Scenario Instructions", "instructions", "instructions_string_table_id"),
+        ("Hints", "hints", "hints_string_table_id"),
+        ("Victory", "victory", "victory_string_table_id"),
+        ("Loss", "loss", "loss_string_table_id"),
+        ("History", "history", "history_string_table_id"),
+        ("Scout", "scouts", "scouts_string_table_id"),
+    )
+
+    @staticmethod
+    def scenario_message_to_editor(value):
+        return (value or "").replace("\r\n", "\n").replace("\r", "\n")
+
+    @staticmethod
+    def editor_message_to_scenario(value):
+        normalised = value.replace("\r\n", "\n").replace("\r", "\n")
+        return normalised.replace("\n", "\r")
+
+    def create_messages_tab(self):
+        self.messages_tab = QWidget()
+        self.tabs.addTab(self.messages_tab, "Messages")
+        layout = QVBoxLayout(self.messages_tab)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        heading = QLabel("Scenario Messages")
+        heading_font = heading.font()
+        heading_font.setPointSize(heading_font.pointSize() + 2)
+        heading_font.setBold(True)
+        heading.setFont(heading_font)
+        layout.addWidget(heading)
+
+        help_label = QLabel(
+            "Edit the scenario instructions, hints, victory, loss, history "
+            "and scout messages. String Table IDs are preserved."
+        )
+        help_label.setWordWrap(True)
+        layout.addWidget(help_label)
+
+        selector = QHBoxLayout()
+        selector.addWidget(QLabel("Message:"))
+        self.message_type_combo = QComboBox()
+        for label, field_name, string_table_field in self.MESSAGE_FIELDS:
+            self.message_type_combo.addItem(label, (field_name, string_table_field))
+        selector.addWidget(self.message_type_combo, 1)
+        selector.addWidget(QLabel("String Table ID:"))
+        self.message_string_table_id = QLineEdit()
+        self.message_string_table_id.setReadOnly(True)
+        self.message_string_table_id.setMaximumWidth(180)
+        selector.addWidget(self.message_string_table_id)
+        layout.addLayout(selector)
+
+        self.scenario_message_editor = QPlainTextEdit()
+        self.scenario_message_editor.setPlaceholderText(
+            "Open a scenario to edit its messages."
+        )
+        layout.addWidget(self.scenario_message_editor, 1)
+
+        buttons = QHBoxLayout()
+        self.centre_message_button = QPushButton("Centre Text")
+        self.centre_message_button.setToolTip(
+            "Centre the current line, or every selected non-empty line, "
+            "for the AoE2 Game Settings message panel."
+        )
+        buttons.addWidget(self.centre_message_button)
+        buttons.addStretch(1)
+        live_save_label = QLabel(
+            "Message text is saved with the scenario automatically."
+        )
+        live_save_label.setStyleSheet("color: #666;")
+        buttons.addWidget(live_save_label)
+        layout.addLayout(buttons)
+
+        self._loading_scenario_message = False
+        self.message_type_combo.currentIndexChanged.connect(
+            self.load_selected_scenario_message
+        )
+        self.centre_message_button.clicked.connect(
+            self.centre_selected_message_text
+        )
+        self.scenario_message_editor.textChanged.connect(
+            self.sync_scenario_message_from_editor
+        )
+        self.set_messages_workspace_enabled(False)
+
+    def set_messages_workspace_enabled(self, enabled):
+        self.message_type_combo.setEnabled(enabled)
+        self.scenario_message_editor.setEnabled(enabled)
+        self.centre_message_button.setEnabled(enabled)
+        if not enabled:
+            self._loading_scenario_message = True
+            try:
+                self.scenario_message_editor.clear()
+                self.message_string_table_id.clear()
+            finally:
+                self._loading_scenario_message = False
+
+    def load_selected_scenario_message(self):
+        scenario = self.scenario_service.scenario
+        if scenario is None:
+            self.set_messages_workspace_enabled(False)
+            return
+        data = self.message_type_combo.currentData()
+        if not data:
+            return
+        field_name, string_table_field = data
+        manager = scenario.message_manager
+        self.set_messages_workspace_enabled(True)
+        self._loading_scenario_message = True
+        try:
+            self.scenario_message_editor.setPlainText(
+                self.scenario_message_to_editor(
+                    getattr(manager, field_name, "")
+                )
+            )
+            self.message_string_table_id.setText(
+                str(getattr(manager, string_table_field, ""))
+            )
+        finally:
+            self._loading_scenario_message = False
+
+    def sync_scenario_message_from_editor(self):
+        if self._loading_scenario_message:
+            return
+        scenario = self.scenario_service.scenario
+        if scenario is None:
+            return
+        data = self.message_type_combo.currentData()
+        if not data:
+            return
+        field_name, _string_table_field = data
+        manager = scenario.message_manager
+        new_value = self.editor_message_to_scenario(
+            self.scenario_message_editor.toPlainText()
+        )
+        if getattr(manager, field_name, "") == new_value:
+            return
+        setattr(manager, field_name, new_value)
+        self.scenario_service.mark_modified()
+        self.update_status()
+
+    # AOKTS_MESSAGES_CENTRE_TEXT_V6
+    # AOKTS_MESSAGES_LIVE_EDIT_V1
+    # Empirically calibrated against the AoE2 DE Game Settings parchment.
+    # The renderer wrapped an unpadded digit ruler at about 61 digit widths.
+    # Scroll centre and wrap safety are intentionally separate constraints.
+    AOE2_MESSAGE_LINE_UNITS = 61.0
+    AOE2_MESSAGE_SAFE_UNITS = 58.0
+    AOE2_MESSAGE_SCROLL_CENTRE_UNITS = 21.0
+    AOE2_MESSAGE_SPACE_UNITS = 0.40
+
+    @staticmethod
+    def aoe2_message_character_width(character):
+        if character == " ":
+            return MainWindow.AOE2_MESSAGE_SPACE_UNITS
+        if character in "ilI|!.,:;'`":
+            return 0.44
+        if character in "MW@%&":
+            return 1.35
+        if character in "mw":
+            return 1.18
+        if character in "JLT1()[]{}ftjr":
+            return 0.72
+        if character in "=+-_":
+            return 0.76
+        if character.isdigit():
+            return 0.86
+        if character.isupper():
+            return 1.00
+        if character.islower():
+            return 0.81
+        return 0.90
+
+    @classmethod
+    def aoe2_message_text_width(cls, text):
+        return sum(cls.aoe2_message_character_width(ch) for ch in text)
+
+    @classmethod
+    def centre_aoe2_message_line_details(cls, line):
+        content = line.lstrip(" ")
+        if not content:
+            return line, False, False
+
+        text_width = cls.aoe2_message_text_width(content)
+        if text_width >= cls.AOE2_MESSAGE_SAFE_UNITS:
+            return content, True, False
+
+        # Stage 1: target the fixed horizontal centre of the parchment.
+        desired_left = max(
+            0.0,
+            cls.AOE2_MESSAGE_SCROLL_CENTRE_UNITS - (text_width / 2.0),
+        )
+
+        # Stage 2: cap only if that placement would approach AoE2's wrap edge.
+        max_safe_left = max(0.0, cls.AOE2_MESSAGE_SAFE_UNITS - text_width)
+        actual_left = min(desired_left, max_safe_left)
+        spaces = max(0, round(actual_left / cls.AOE2_MESSAGE_SPACE_UNITS))
+
+        # In-game calibration: mixed/lowercase headings render slightly left
+        # of uppercase-only headings at the same estimated midpoint. Add one
+        # AoE2 leading space while preserving the calibrated global centre.
+        has_lowercase = any(character.islower() for character in content)
+        has_digit = any(character.isdigit() for character in content)
+        if has_lowercase:
+            spaces += 1
+        if has_lowercase and has_digit:
+            spaces += 1
+
+        # Rounding may add a fraction of a unit; trim until safely inside.
+        while spaces > 0 and (
+            spaces * cls.AOE2_MESSAGE_SPACE_UNITS + text_width
+            > cls.AOE2_MESSAGE_SAFE_UNITS
+        ):
+            spaces -= 1
+
+        centred = (" " * spaces) + content
+        was_capped = actual_left + 1e-9 < desired_left
+        return centred, False, was_capped
+
+    @classmethod
+    def centre_aoe2_message_line(cls, line):
+        centred, _too_wide, _was_capped = (
+            cls.centre_aoe2_message_line_details(line)
+        )
+        return centred
+
+    def centre_selected_message_text(self):
+        editor = self.scenario_message_editor
+        cursor = editor.textCursor()
+        text = editor.toPlainText()
+        lines = text.split("\n")
+        selection_start = cursor.selectionStart()
+        selection_end = cursor.selectionEnd()
+        start_line = text.count("\n", 0, selection_start)
+        if cursor.hasSelection():
+            adjusted_end = max(selection_start, selection_end - 1)
+            end_line = text.count("\n", 0, adjusted_end)
+        else:
+            end_line = start_line
+        if not lines or start_line >= len(lines):
+            return
+        end_line = min(end_line, len(lines) - 1)
+        changed = False
+        too_wide_count = 0
+        capped_count = 0
+        for index in range(start_line, end_line + 1):
+            centred, too_wide, was_capped = (
+                self.centre_aoe2_message_line_details(lines[index])
+            )
+            too_wide_count += int(too_wide)
+            capped_count += int(was_capped)
+            if centred != lines[index]:
+                lines[index] = centred
+                changed = True
+        if not changed:
+            self.statusBar().showMessage("Selected text is already centred.", 3000)
+            return
+        editor.setPlainText("\n".join(lines))
+        new_cursor = editor.textCursor()
+        line_start = sum(len(line) + 1 for line in lines[:start_line])
+        if start_line == end_line:
+            new_cursor.setPosition(line_start + len(lines[start_line]))
+        else:
+            line_end = sum(len(line) + 1 for line in lines[:end_line]) + len(lines[end_line])
+            new_cursor.setPosition(line_start)
+            new_cursor.setPosition(line_end, new_cursor.KeepAnchor)
+        editor.setTextCursor(new_cursor)
+        editor.setFocus()
+        if too_wide_count:
+            message = (
+                f"{too_wide_count} selected line(s) are too wide to centre "
+                "safely and were left unpadded."
+            )
+        elif capped_count:
+            message = (
+                "Centred selected text with wrap-safe padding. "
+                "The centred text will be included when the scenario is saved."
+            )
+        else:
+            message = (
+                "Centred selected message text. "
+                "The centred text will be included when the scenario is saved."
+            )
+        self.statusBar().showMessage(message, 7000)
+
+    def refresh_messages_workspace(self):
+        self.load_selected_scenario_message()
+
+
+    # AOKTS_PLAYERS_TAB_V1
+    PLAYER_STARTING_AGES = (
+        ("Dark Age", StartingAge.DARK_AGE),
+        ("Feudal Age", StartingAge.FEUDAL_AGE),
+        ("Castle Age", StartingAge.CASTLE_AGE),
+        ("Imperial Age", StartingAge.IMPERIAL_AGE),
+        ("Post-Imperial Age", StartingAge.POST_IMPERIAL_AGE),
+    )
+    PLAYER_COLORS = (
+        ("Blue", ColorId.BLUE),
+        ("Red", ColorId.RED),
+        ("Green", ColorId.GREEN),
+        ("Yellow", ColorId.YELLOW),
+        ("Aqua", ColorId.AQUA),
+        ("Purple", ColorId.PURPLE),
+        ("Gray", ColorId.GRAY),
+        ("Orange", ColorId.ORANGE),
+    )
+
+    def create_players_tab(self):
+        self.players_tab = QWidget()
+        self.tabs.addTab(self.players_tab, "Players")
+        layout = QVBoxLayout(self.players_tab)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+        self._loading_player_fields = False
+
+        selector_group = QGroupBox("Player Selection")
+        selector_layout = QFormLayout(selector_group)
+        self.player_selector_combo = QComboBox()
+        self.player_selector_combo.addItem("Gaia", 0)
+        for player_number in range(1, 9):
+            self.player_selector_combo.addItem(
+                f"Player {player_number}", player_number
+            )
+        self.number_of_players_combo = QComboBox()
+        for count in range(1, 9):
+            label = f"{count} Player" if count == 1 else f"{count} Players"
+            self.number_of_players_combo.addItem(label, count)
+        selector_layout.addRow("Player:", self.player_selector_combo)
+        selector_layout.addRow(
+            "Number of Players:", self.number_of_players_combo
+        )
+        layout.addWidget(selector_group)
+
+        general_group = QGroupBox("General")
+        general_layout = QFormLayout(general_group)
+        self.player_starting_age_combo = QComboBox()
+        for label, value in self.PLAYER_STARTING_AGES:
+            self.player_starting_age_combo.addItem(label, value)
+        self.player_color_combo = QComboBox()
+        for label, value in self.PLAYER_COLORS:
+            self.player_color_combo.addItem(label, value)
+        self.player_civilization_combo = QComboBox()
+        self.player_architecture_combo = QComboBox()
+        general_layout.addRow("Starting Age:", self.player_starting_age_combo)
+        general_layout.addRow("Color:", self.player_color_combo)
+        general_layout.addRow(
+            "Civilization:", self.player_civilization_combo
+        )
+        general_layout.addRow(
+            "Architecture:", self.player_architecture_combo
+        )
+        self.player_lock_civ_check = QCheckBox("Lock Civ")
+        lock_row = QHBoxLayout()
+        lock_row.addWidget(self.player_lock_civ_check)
+        lock_row.addStretch(1)
+        general_layout.addRow("", lock_row)
+        layout.addWidget(general_group)
+
+        resources_group = QGroupBox("Starting Resources")
+        resources_layout = QFormLayout(resources_group)
+        self.player_food_spin = QSpinBox()
+        self.player_wood_spin = QSpinBox()
+        self.player_stone_spin = QSpinBox()
+        self.player_gold_spin = QSpinBox()
+        for control in (
+            self.player_food_spin,
+            self.player_wood_spin,
+            self.player_stone_spin,
+            self.player_gold_spin,
+        ):
+            control.setRange(0, 2147483647)
+        resources_layout.addRow("Food:", self.player_food_spin)
+        resources_layout.addRow("Wood:", self.player_wood_spin)
+        resources_layout.addRow("Stone:", self.player_stone_spin)
+        resources_layout.addRow("Gold:", self.player_gold_spin)
+        layout.addWidget(resources_group)
+
+        details_group = QGroupBox("Player Properties")
+        details_layout = QFormLayout(details_group)
+        self.player_population_cap_spin = QSpinBox()
+        self.player_population_cap_spin.setRange(0, 500)
+        self.player_base_priority_spin = QSpinBox()
+        self.player_base_priority_spin.setRange(-2147483648, 2147483647)
+        self.player_tribe_name_edit = QLineEdit()
+        details_layout.addRow(
+            "Population Limit:", self.player_population_cap_spin
+        )
+        details_layout.addRow(
+            "Base Priority:", self.player_base_priority_spin
+        )
+        details_layout.addRow("Tribe Name:", self.player_tribe_name_edit)
+        layout.addWidget(details_group)
+        layout.addStretch(1)
+
+        self.player_selector_combo.currentIndexChanged.connect(
+            self.load_selected_player
+        )
+        self.number_of_players_combo.currentIndexChanged.connect(
+            self.update_number_of_players
+        )
+        self.player_starting_age_combo.currentIndexChanged.connect(
+            self.update_selected_player
+        )
+        self.player_color_combo.currentIndexChanged.connect(
+            self.update_selected_player
+        )
+        self.player_civilization_combo.currentIndexChanged.connect(
+            self.update_selected_player
+        )
+        self.player_architecture_combo.currentIndexChanged.connect(
+            self.update_selected_player
+        )
+        for control in (
+            self.player_food_spin,
+            self.player_wood_spin,
+            self.player_stone_spin,
+            self.player_gold_spin,
+            self.player_population_cap_spin,
+            self.player_base_priority_spin,
+        ):
+            control.valueChanged.connect(self.update_selected_player)
+        self.player_lock_civ_check.stateChanged.connect(
+            self.update_selected_player
+        )
+        self.player_tribe_name_edit.editingFinished.connect(
+            self.update_selected_player
+        )
+        self.players_tab.setEnabled(False)
+
+    def selected_player_object(self):
+        scenario = self.scenario_service.scenario
+        if scenario is None:
+            return None
+        player_number = self.player_selector_combo.currentData()
+        players = getattr(scenario.player_manager, "players", None)
+        if isinstance(players, dict):
+            return players.get(player_number)
+        private_players = getattr(scenario.player_manager, "_players", None)
+        if isinstance(private_players, dict):
+            return private_players.get(player_number)
+        if isinstance(players, (list, tuple)):
+            if 0 <= player_number < len(players):
+                return players[player_number]
+        return None
+
+    def populate_player_civilization_combos(self, player):
+        civilization_values = sorted(
+            (
+                civilization
+                for civilization in Civilization
+                if civilization is not Civilization.GAIA
+            ),
+            key=lambda civilization: (
+                civilization.name.replace("_", " ").casefold()
+            ),
+        )
+        self.player_civilization_combo.clear()
+        self.player_architecture_combo.clear()
+        for civilization in civilization_values:
+            name = civilization.name.replace("_", " ").title()
+            self.player_civilization_combo.addItem(name, civilization)
+            self.player_architecture_combo.addItem(name, civilization)
+
+    def refresh_players_tab(self):
+        scenario = self.scenario_service.scenario
+        self.players_tab.setEnabled(scenario is not None)
+        if scenario is None:
+            return
+        self._loading_player_fields = True
+        try:
+            active_players = scenario.player_manager.active_players
+            self.set_combo_data(
+                self.number_of_players_combo, active_players
+            )
+            player = self.selected_player_object()
+            if player is not None:
+                self.populate_player_civilization_combos(player)
+        finally:
+            self._loading_player_fields = False
+        self.update_available_player_choices()
+        self.load_selected_player()
+
+    def load_selected_player(self):
+        if self._loading_player_fields:
+            return
+        player = self.selected_player_object()
+        if player is None:
+            return
+        self._loading_player_fields = True
+        try:
+            self.populate_player_civilization_combos(player)
+            self.set_combo_data(
+                self.player_starting_age_combo, player.starting_age
+            )
+            self.set_combo_data(self.player_color_combo, player.color)
+            self.set_combo_data(
+                self.player_civilization_combo, player.civilization
+            )
+            self.set_combo_data(
+                self.player_architecture_combo, player.architecture_set
+            )
+            self.player_food_spin.setValue(int(player.food or 0))
+            self.player_wood_spin.setValue(int(player.wood or 0))
+            self.player_stone_spin.setValue(int(player.stone or 0))
+            self.player_gold_spin.setValue(int(player.gold or 0))
+            self.player_population_cap_spin.setValue(
+                int(player.population_cap or 0)
+            )
+            self.player_base_priority_spin.setValue(
+                int(player.base_priority or 0)
+            )
+            self.player_tribe_name_edit.setText(player.tribe_name or "")
+            self.player_lock_civ_check.setChecked(bool(player.lock_civ))
+        finally:
+            self._loading_player_fields = False
+
+    def update_available_player_choices(self):
+        scenario = self.scenario_service.scenario
+        if scenario is None:
+            return
+        active_players = int(scenario.player_manager.active_players)
+        current_player = self.player_selector_combo.currentData()
+        self._loading_player_fields = True
+        try:
+            self.player_selector_combo.clear()
+            self.player_selector_combo.addItem("Gaia", 0)
+            for player_number in range(1, active_players + 1):
+                self.player_selector_combo.addItem(
+                    f"Player {player_number}", player_number
+                )
+            if current_player is None or current_player > active_players:
+                current_player = active_players
+            self.set_combo_data(self.player_selector_combo, current_player)
+        finally:
+            self._loading_player_fields = False
+
+    def update_number_of_players(self):
+        if self._loading_player_fields:
+            return
+        scenario = self.scenario_service.scenario
+        if scenario is None:
+            return
+        value = self.number_of_players_combo.currentData()
+        if scenario.player_manager.active_players == value:
+            return
+        scenario.player_manager.active_players = value
+        self.update_available_player_choices()
+        self.load_selected_player()
+        self.scenario_service.mark_modified()
+        self.update_status()
+
+    def update_selected_player(self, *_args):
+        if self._loading_player_fields:
+            return
+        player = self.selected_player_object()
+        if player is None:
+            return
+        values = {
+            "starting_age": self.player_starting_age_combo.currentData(),
+            "color": self.player_color_combo.currentData(),
+            "civilization": self.player_civilization_combo.currentData(),
+            "architecture_set": self.player_architecture_combo.currentData(),
+            "food": self.player_food_spin.value(),
+            "wood": self.player_wood_spin.value(),
+            "stone": self.player_stone_spin.value(),
+            "gold": self.player_gold_spin.value(),
+            "population_cap": self.player_population_cap_spin.value(),
+            "base_priority": self.player_base_priority_spin.value(),
+            "tribe_name": self.player_tribe_name_edit.text(),
+            "lock_civ": self.player_lock_civ_check.isChecked(),
+        }
+        if all(getattr(player, name) == value for name, value in values.items()):
+            return
+        for name, value in values.items():
+            setattr(player, name, value)
+        self.scenario_service.mark_modified()
+        self.update_status()
+
     def create_units_tab(self):
         self.units_tab = QWidget()
         self.tabs.addTab(self.units_tab, "Units")
@@ -3989,6 +4581,7 @@ class MainWindow(QMainWindow):
         self.save_action.setEnabled(scenario_loaded)
         self.save_as_action.setEnabled(scenario_loaded)
         self.export_triggers_action.setEnabled(scenario_loaded)
+        self.set_messages_workspace_enabled(scenario_loaded)
 
         # Edit menu actions.
         self.update_undo_redo_actions()
@@ -4015,6 +4608,9 @@ class MainWindow(QMainWindow):
             scenario_loaded
         )
 
+        # Players workspace.
+        self.players_tab.setEnabled(scenario_loaded)
+
         # Coordinate-based unit placement workspace.
         self.unit_placement_group.setEnabled(
             scenario_loaded
@@ -4023,6 +4619,7 @@ class MainWindow(QMainWindow):
             scenario_loaded
         )
         self.tabs.setTabEnabled(1, scenario_loaded)
+        self.tabs.setTabEnabled(2, scenario_loaded)
 
     def update_undo_redo_actions(self):
         if not hasattr(self, "undo_action"):
@@ -4076,7 +4673,11 @@ class MainWindow(QMainWindow):
 
         self.scenario_service.mark_modified()
         self.refresh_trigger_ui()
-        self.select_trigger_object(command.selected_trigger)
+        selected_trigger = getattr(command, "selected_trigger", None)
+        if selected_trigger is not None:
+            self.select_trigger_object(selected_trigger)
+        if isinstance(command, EditScenarioMessageCommand):
+            self.refresh_messages_workspace()
 
         selected_logic_object = getattr(
             command,
@@ -4248,6 +4849,8 @@ class MainWindow(QMainWindow):
 
         self.update_status()
         self.update_minimap()
+        self.refresh_messages_workspace()
+        self.refresh_players_tab()
 
     def new_scenario(self):
         if self.scenario_service.is_modified():
